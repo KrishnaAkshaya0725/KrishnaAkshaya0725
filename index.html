@@ -1,0 +1,103 @@
+<!doctype 
+
+html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Smart Bin Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body{font-family: Arial, sans-serif; margin:20px;}
+    table{border-collapse:collapse; width:100%}
+    th,td{border:1px solid #ddd; padding:8px; text-align:left}
+    th{background:#f2f2f2;}
+    .high{background:#ffdddd}
+    #map{height:400px; width:100%; margin:20px 0;}
+  </style>
+</head>
+<body>
+  <h2>Smart Waste Bins — Dashboard</h2>
+  
+  <canvas id="fillChart" width="600" height="200"></canvas>
+  
+  <h3>Smart Bins Map</h3>
+  <div id="map"></div>
+  
+  <h3>Bin Readings</h3>
+  <table id="binsTable">
+    <thead><tr>
+      <th>Bin_ID</th><th>Timestamp</th><th>Fill_Level(%)</th>
+      <th>Moisture</th><th>Gas(ppm)</th><th>Category</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+
+<script>
+let map;
+let markers = [];
+
+async function loadData(){
+  const res = await fetch('/api/bins');
+  const data = await res.json();
+
+  // populate table
+  const tbody = document.querySelector('#binsTable tbody');
+  tbody.innerHTML = '';
+  data.forEach(r=>{
+    const tr = document.createElement('tr');
+    if (r.Fill_Level >= 80) tr.classList.add('high');
+    tr.innerHTML = `<td>${r.Bin_ID}</td>
+                    <td>${r.Timestamp}</td>
+                    <td>${r.Fill_Level}</td>
+                    <td>${r.Moisture}</td>
+                    <td>${r.Gas_ppm}</td>
+                    <td>${r.Category}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // chart
+  const labels = data.map(r => r.Bin_ID);
+  const fills = data.map(r => r.Fill_Level);
+  const ctx = document.getElementById('fillChart').getContext('2d');
+  if (window.binChart) window.binChart.destroy();
+  window.binChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label:'Fill Level %', data: fills }] },
+    options: { scales: { y: { beginAtZero:true, max: 100 } } }
+  });
+
+  // map markers
+  markers.forEach(m=>m.setMap(null));
+  markers=[];
+  data.forEach(r=>{
+    if(r.Lat && r.Long){
+      const marker = new google.maps.Marker({
+        position:{lat:parseFloat(r.Lat), lng:parseFloat(r.Long)},
+        map,
+        title:${r.Bin_ID} - ${r.Fill_Level}%
+      });
+      const infowindow = new google.maps.InfoWindow({
+        content: <b>${r.Bin_ID}</b><br>Fill: ${r.Fill_Level}%<br>Type: ${r.Category}
+      });
+      marker.addListener("click", ()=>infowindow.open(map, marker));
+      markers.push(marker);
+    }
+  });
+}
+
+// Google Map init
+function initMap(){
+  map = new google.maps.Map(document.getElementById("map"), {
+    center: {lat:16.3067, lng:80.4365},
+    zoom: 14
+  });
+  loadData();
+  setInterval(loadData, 20000);
+}
+</script>
+
+<!-- Replace YOUR_API_KEY with actual Google Maps API key -->
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap"></script>
+
+</body>
+</html>
